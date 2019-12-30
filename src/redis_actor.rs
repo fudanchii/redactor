@@ -109,7 +109,7 @@ impl RedisActorBuilder {
         self
     }
 
-    pub fn start(self) -> redis::RedisResult<Addr<RedisActor>> {
+    pub fn start(self) -> Result<Addr<RedisActor>, Error> {
         let actor = RedisActor {
             client: redis::Client::open(self.0.redis_uri.as_ref())?,
         };
