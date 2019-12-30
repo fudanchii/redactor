@@ -1,11 +1,14 @@
+//! Redis actor module.
+
 use actix::prelude::*;
 use futures::{
     compat::Future01CompatExt,
     future::{ok, TryFutureExt},
 };
 use std::error;
-use std::time;
 
+/// Represent error for redis actor, this basically wraps
+/// any type that implements `std::error::Error`.
 #[derive(Debug)]
 pub struct Error(String);
 
@@ -15,15 +18,29 @@ impl<E: error::Error> From<E> for Error {
     }
 }
 
+/// Cmd represents command message sent to redis actor.
 pub struct Cmd(redis::Cmd);
+
+impl Cmd {
+
+    /// Create Cmd by wrapping `redis::Cmd` struct.
+    pub fn wrap(cmd: &mut redis::Cmd) -> Cmd {
+        Cmd(cmd.clone())
+    }
+}
 
 impl Message for Cmd {
     type Result = Result<redis::Value, Error>;
 }
 
+/// Pipe represents pipeline message sent to redis actor.
+/// This wraps `redis::Pipeline` to support multiple command sent
+/// in one roundtrip.
 pub struct Pipe(redis::Pipeline);
 
 impl Pipe {
+
+    /// Create Pipe by wrapping `redis::Pipeline` struct.
     pub fn line(rpipe: &mut redis::Pipeline) -> Pipe {
         Pipe(rpipe.clone())
     }
@@ -33,11 +50,14 @@ impl Message for Pipe {
     type Result = Result<redis::Value, Error>;
 }
 
+/// The actor itself.
 pub struct RedisActor {
     client: redis::Client,
 }
 
 impl RedisActor {
+
+    /// Create actor with builder pattern, call `start()` to start the actor.
     pub fn build() -> RedisActorBuilder {
         RedisActorBuilder(RedisConfig::default())
     }
@@ -78,36 +98,12 @@ impl Handler<Pipe> for RedisActor {
 }
 
 pub struct RedisConfig {
-    use_breaker: bool,
-    exponential_backoff: (time::Duration, time::Duration),
-    errors_threshold: usize,
-    connection_probe: bool,
     redis_uri: String,
 }
 
 pub struct RedisActorBuilder(RedisConfig);
 
 impl RedisActorBuilder {
-    pub fn use_breaker(mut self) -> Self {
-        self.0.use_breaker = true;
-        self
-    }
-
-    pub fn exponential_backoff(mut self, min: time::Duration, max: time::Duration) -> Self {
-        self.0.exponential_backoff = (min, max);
-        self
-    }
-
-    pub fn errors_threshold(mut self, count: usize) -> Self {
-        self.0.errors_threshold = count;
-        self
-    }
-
-    pub fn use_connection_probe(mut self) -> Self {
-        self.0.connection_probe = true;
-        self
-    }
-
     pub fn set_uri<U: ToString>(mut self, arg: U) -> Self {
         self.0.redis_uri = arg.to_string();
         self
@@ -124,18 +120,13 @@ impl RedisActorBuilder {
 
 impl Default for RedisConfig {
     fn default() -> Self {
-        let default_duration = time::Duration::from_secs(0);
-
         RedisConfig {
-            use_breaker: false,
-            exponential_backoff: (default_duration, default_duration),
-            errors_threshold: 0,
-            connection_probe: false,
             redis_uri: "redis://127.0.0.1:6379".to_string(),
         }
     }
 }
 
+/// Translate redis value to Rust types.
 pub fn val<T: redis::FromRedisValue>(v: Result<redis::Value, Error>) -> Result<T, Error> {
     v.and_then(|val| redis::from_redis_value(&val).map_err(Error::from))
 }
@@ -146,18 +137,20 @@ mod tests {
     use redis as r;
 
     #[actix_rt::test]
-    async fn test_redis_cmd_ping() {
-        let addr = RedisActor::build().start().unwrap();
-        let result = addr.send(Cmd(r::cmd("PING"))).await.unwrap();
-        let response: String = val(result).unwrap();
+    async fn test_redis_cmd_ping() -> Result<(), Error> {
+        let addr = RedisActor::build().start()?;
+        let result = addr.send(Cmd::wrap(&mut r::cmd("PING"))).await?;
+        let response: String = val(result)?;
         assert_eq!(response, "PONG");
+        Ok(())
     }
 
     #[actix_rt::test]
-    async fn test_redis_pipeline_ping() {
-        let addr = RedisActor::build().start().unwrap();
-        let result = addr.send(Pipe::line(r::pipe().cmd("PING"))).await.unwrap();
-        let response: Vec<String> = val(result).unwrap();
+    async fn test_redis_pipeline_ping() -> Result<(), Error> {
+        let addr = RedisActor::build().start()?;
+        let result = addr.send(Pipe::line(r::pipe().cmd("PING"))).await?;
+        let response: Vec<String> = val(result)?;
         assert_eq!(response, vec!["PONG"]);
+        Ok(())
     }
 }
