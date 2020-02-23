@@ -24,6 +24,7 @@
 //!     assert_eq!(bitcount, 32);
 //!     Ok(())
 //! }
+//! ```
 
 #![warn(missing_docs)]
 
