@@ -9,6 +9,6 @@ edition = "2018"
 [dependencies]
 actix = "^0.9.0"
 actix-rt = "^1.0.0"
-redis = "0.13.0"
+redis = "0.15.1"
 failsafe = "0.3.1"
-futures = { version = "^0.3.1", features = [ "compat" ] }
+futures = { version = "^0.3.1" }

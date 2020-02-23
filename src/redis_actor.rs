@@ -1,10 +1,7 @@
 //! Redis actor module.
 
 use actix::prelude::*;
-use futures::{
-    compat::Future01CompatExt,
-    future::{ok, TryFutureExt},
-};
+use futures::future::{TryFutureExt};
 use std::error;
 
 /// Represent error for redis actor, this basically wraps
@@ -71,14 +68,11 @@ impl Handler<Cmd> for RedisActor {
     type Result = ResponseFuture<Result<redis::Value, Error>>;
 
     fn handle(&mut self, msg: Cmd, _ctx: &mut Context<Self>) -> Self::Result {
-        Box::pin(
-            self.client
-                .get_async_connection()
-                .compat()
-                .and_then(move |conn| msg.0.query_async(conn).compat())
-                .and_then(|result| ok(result.1))
-                .map_err(Error::from),
-        )
+        let client = self.client.clone();
+        Box::pin(async move {
+            let mut conn = client.get_async_connection().map_err(Error::from).await?;
+            msg.0.query_async(&mut conn).map_err(Error::from).await
+        })
     }
 }
 
@@ -86,14 +80,11 @@ impl Handler<Pipe> for RedisActor {
     type Result = ResponseFuture<Result<redis::Value, Error>>;
 
     fn handle(&mut self, msg: Pipe, _ctx: &mut Context<Self>) -> Self::Result {
-        Box::pin(
-            self.client
-                .get_async_connection()
-                .compat()
-                .and_then(move |conn| msg.0.query_async(conn).compat())
-                .and_then(|result| ok(result.1))
-                .map_err(Error::from),
-        )
+        let client = self.client.clone();
+        Box::pin(async move {
+            let mut conn = client.get_async_connection().map_err(Error::from).await?;
+            msg.0.query_async(&mut conn).map_err(Error::from).await
+        })
     }
 }
 
